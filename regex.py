@@ -3,137 +3,163 @@ from abc import ABC, abstractmethod
 
 
 class State(ABC):
-
-    @abstractmethod
     def __init__(self) -> None:
-        pass
+        self.next_states = []
+        self.is_terminal = False
 
     @abstractmethod
     def check_self(self, char: str) -> bool:
         """
-        function checks whether occured character is handled by current ctate
+        function checks whether occured character is handled by current state
         """
         pass
 
-    def check_next(self, next_char: str) -> State | Exception:
+    def check_next(self, next_char: str) -> State | None:
         for state in self.next_states:
             if state.check_self(next_char):
                 return state
-        raise NotImplementedError("rejected string")
+        return None
 
 
 class StartState(State):
-    next_states: list[State] = []
-
     def __init__(self):
         super().__init__()
 
     def check_self(self, char):
-        return super().check_self(char)
+        return True
 
 
 class TerminationState(State):
-    pass  # Implement
+    def __init__(self):
+        super().__init__()
+        self.is_terminal = True
+    
+    def check_self(self, char):
+        return False
 
 
 class DotState(State):
     """
     state for . character (any character accepted)
     """
-
-    next_states: list[State] = []
-
     def __init__(self):
         super().__init__()
 
     def check_self(self, char: str):
-        pass  # Implement
+        return True
 
 
 class AsciiState(State):
     """
     state for alphabet letters or numbers
     """
-
-    next_states: list[State] = []
-    curr_sym = ""
-
     def __init__(self, symbol: str) -> None:
-        pass  # Implement
+        super().__init__()
+        self.symbol = symbol
 
-    def check_self(self, curr_char: str) -> State | Exception:
-        pass  # Implement
+    def check_self(self, char: str) -> bool:
+        return char == self.symbol
 
 
 class StarState(State):
-
-    next_states: list[State] = []
-
+    """
+    State for * repetition (0 or more)
+    """
     def __init__(self, checking_state: State):
-        pass  # Implement
+        super().__init__()
+        self.checking_state = checking_state
 
     def check_self(self, char):
-        for state in self.next_states:
-            if state.check_self(char):
-                return True
-
-        return False
+        return self.checking_state.check_self(char)
 
 
 class PlusState(State):
-    next_states: list[State] = []
-
+    """
+    State for + repetition (1 or more)
+    """
     def __init__(self, checking_state: State):
-        pass  # Implement
+        super().__init__()
+        self.checking_state = checking_state
+        self.counter = 0
 
     def check_self(self, char):
-        pass  # Implement
+        result = self.checking_state.check_self(char)
+        if result:
+            self.counter += 1
+        return result
 
 
 class RegexFSM:
-    curr_state: State = StartState()
-
     def __init__(self, regex_expr: str) -> None:
+        self.regex = regex_expr
+    
+    def _match_star(self, regex_index, string_index, string):
+        """Handle * repetition matching"""
+        char_to_repeat = self.regex[regex_index - 1]
 
-        prev_state = self.curr_state
-        tmp_next_state = self.curr_state
+        while string_index < len(string) and (string[string_index] == char_to_repeat or char_to_repeat == '.'):
+            string_index += 1
 
-        for char in regex_expr:
-            tmp_next_state = self.__init_next_state(char, prev_state, tmp_next_state)
-            prev_state.next_states.append(tmp_next_state)
+        original_string_index = string_index
+        for i in range(original_string_index, -1, -1):
+            if self._match_from(regex_index + 1, i, string):
+                return True
+                
+        return False
+            
+    def _match_plus(self, regex_index, string_index, string):
+        """Handle + repetition matching"""
+        char_to_repeat = self.regex[regex_index - 1]
 
-    def __init_next_state(
-        self, next_token: str, prev_state: State, tmp_next_state: State
-    ) -> State:
-        new_state = None
+        if string_index >= len(string) or (string[string_index] != char_to_repeat and char_to_repeat != '.'):
+            return False
+            
+        while string_index < len(string) and (string[string_index] == char_to_repeat or char_to_repeat == '.'):
+            string_index += 1
 
-        match next_token:
-            case next_token if next_token == ".":
-                new_state = DotState()
-            case next_token if next_token == "*":
-                new_state = StarState(tmp_next_state)
-                # here you have to think, how to do it.
+        original_string_index = string_index
+        for i in range(original_string_index, -1, -1):
+            if self._match_from(regex_index + 1, i, string):
+                return True
+                
+        return False
+            
+    def _match_from(self, regex_index, string_index, string):
+        """Recursively match the string from the given indices"""
+        if regex_index >= len(self.regex):
+            return string_index >= len(string)
 
-            case next_token if next_token == "+":
-                pass  # Implement
+        if regex_index + 1 < len(self.regex) and self.regex[regex_index + 1] == '*':
+            return self._match_star(regex_index + 1, string_index, string)
+            
+        if regex_index + 1 < len(self.regex) and self.regex[regex_index + 1] == '+':
+            return self._match_plus(regex_index + 1, string_index, string)
 
-            case next_token if next_token.isascii():
-                new_state = AsciiState(next_token)
+        if string_index < len(string) and (self.regex[regex_index] == '.' or self.regex[regex_index] == string[string_index]):
+            return self._match_from(regex_index + 1, string_index + 1, string)
+            
+        return False
 
-            case _:
-                raise AttributeError("Character is not supported")
-
-        return new_state
-
-    def check_string(self):
-        pass  # Implement
+    def check_string(self, string: str) -> bool:
+        """
+        Check if the string matches the regex pattern using recursive backtracking
+        """
+        return self._match_from(0, 0, string)
 
 
 if __name__ == "__main__":
-    regex_pattern = "a*4.+hi"
+    # regex_pattern = "a*4.+hi"
+
+    # regex_compiled = RegexFSM(regex_pattern)
+
+    # print(regex_compiled.check_string("aaaaaa4uhi"))  # Should be True
+    # print(regex_compiled.check_string("4uhi"))  # Should be True
+    # print(regex_compiled.check_string("meow"))  # Should be False
+    regex_pattern = "a4.+hi+"
 
     regex_compiled = RegexFSM(regex_pattern)
 
-    print(regex_compiled.check_string("aaaaaa4uhi"))  # True
-    print(regex_compiled.check_string("4uhi"))  # True
-    print(regex_compiled.check_string("meow"))  # False
+    print(regex_compiled.check_string("a4uhi"))  # Should be True
+    print(regex_compiled.check_string("a4hihi"))  # Should be True
+    print(regex_compiled.check_string("4uhi"))  # false
+    print(regex_compiled.check_string("meow"))  # Should be False
